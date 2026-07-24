@@ -112,8 +112,9 @@ input[type=text], input[type=email], input[type=number], textarea { width: 100%;
     <p id="success-detail"></p>
   </div>
 </div>
+<iframe name="hidden-iframe" style="display:none;"></iframe>
 <script>
-var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_nNygGOKWf8zY2Hf0p8qu-l1FT7TK4RS4zRr-KLH6P84SHYDTF8gCoGqj_f-ah5KmvQ/exec";
+var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoD8ILjxv3mjKsmkUvItLXgzmRl1a7oYUj-qD6fYcB5hdcCV9UTXbgNNvpH-03krvnrg/exec";
 
 var ITEMS = [
   { name: "Hamburger buns", needed: 72 },
@@ -133,37 +134,21 @@ var quantities = {};
 ITEMS.forEach(function(item) { quantities[item.name] = 0; });
 
 function loadStatus() {
-  var script = document.createElement('script');
-  script.src = SCRIPT_URL + '?callback=handleStatusResponse';
-  script.onerror = function() {
-    console.warn('JSONP load failed, trying fetch');
-    tryFetchStatus();
-  };
-  document.head.appendChild(script);
-  setTimeout(function() {
-    if (!window._statusLoaded) { tryFetchStatus(); }
-  }, 5000);
-}
-
-function tryFetchStatus() {
-  fetch(SCRIPT_URL)
+  fetch(SCRIPT_URL, { method: 'GET', redirect: 'follow' })
     .then(function(r) { return r.json(); })
-    .then(function(data) { handleStatusResponse(data); })
+    .then(function(data) {
+      ITEMS.forEach(function(item) {
+        claimed[item.name] = data[item.name] || 0;
+      });
+      renderStatus();
+      renderPickers();
+    })
     .catch(function(err) {
       console.warn('Could not load status:', err);
       renderStatus();
       renderPickers();
     });
 }
-
-window.handleStatusResponse = function(data) {
-  window._statusLoaded = true;
-  ITEMS.forEach(function(item) {
-    claimed[item.name] = data[item.name] || 0;
-  });
-  renderStatus();
-  renderPickers();
-};
 
 function renderStatus() {
   var el = document.getElementById('items-status');
@@ -305,4 +290,3 @@ function submitForm() {
 
 loadStatus();
 </script>
-<iframe name="hidden-iframe" style="display:none;"></iframe>
