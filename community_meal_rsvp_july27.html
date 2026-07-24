@@ -113,7 +113,7 @@ input[type=text], input[type=email], input[type=number], textarea { width: 100%;
   </div>
 </div>
 <script>
-var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzBMLzZn57Ka15j_T1StY4cS7zHCd-59DCAbqcIIhTJRB-RVQwXxPIqYOilSyHCzriHWw/exec";
+var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_nNygGOKWf8zY2Hf0p8qu-l1FT7TK4RS4zRr-KLH6P84SHYDTF8gCoGqj_f-ah5KmvQ/exec";
 
 var ITEMS = [
   { name: "Hamburger buns", needed: 72 },
@@ -133,27 +133,37 @@ var quantities = {};
 ITEMS.forEach(function(item) { quantities[item.name] = 0; });
 
 function loadStatus() {
-  try {
-    fetch(SCRIPT_URL)
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        ITEMS.forEach(function(item) {
-          claimed[item.name] = data[item.name] || 0;
-        });
-        renderStatus();
-        renderPickers();
-      })
-      .catch(function(err) {
-        console.warn('Could not load status:', err);
-        renderStatus();
-        renderPickers();
-      });
-  } catch(e) {
-    console.warn('Fetch error:', e);
-    renderStatus();
-    renderPickers();
-  }
+  var script = document.createElement('script');
+  script.src = SCRIPT_URL + '?callback=handleStatusResponse';
+  script.onerror = function() {
+    console.warn('JSONP load failed, trying fetch');
+    tryFetchStatus();
+  };
+  document.head.appendChild(script);
+  setTimeout(function() {
+    if (!window._statusLoaded) { tryFetchStatus(); }
+  }, 5000);
 }
+
+function tryFetchStatus() {
+  fetch(SCRIPT_URL)
+    .then(function(r) { return r.json(); })
+    .then(function(data) { handleStatusResponse(data); })
+    .catch(function(err) {
+      console.warn('Could not load status:', err);
+      renderStatus();
+      renderPickers();
+    });
+}
+
+window.handleStatusResponse = function(data) {
+  window._statusLoaded = true;
+  ITEMS.forEach(function(item) {
+    claimed[item.name] = data[item.name] || 0;
+  });
+  renderStatus();
+  renderPickers();
+};
 
 function renderStatus() {
   var el = document.getElementById('items-status');
@@ -179,15 +189,12 @@ function renderStatus() {
   el.innerHTML = html;
 }
 
-function getId(name) {
-  return name.replace(/ /g, '-');
-}
+function getId(name) { return name.replace(/ /g, '-'); }
 
 function renderPickers() {
   var grid = document.getElementById('items-grid');
   var html = '';
-  for (var i = 0; i < ITEMS.length; i++) {
-    var item = ITEMS[i];
+  ITEMS.forEach(function(item) {
     var c = claimed[item.name] || 0;
     var remaining = Math.max(0, item.needed - c);
     var fullyDone = remaining === 0;
@@ -197,20 +204,21 @@ function renderPickers() {
     html += '<div><div class="item-picker-name">' + item.name + '</div>';
     html += '<div class="item-picker-remaining">' + (fullyDone ? 'Fully claimed' : remaining + ' still needed') + '</div></div>';
     html += '<div class="qty-control">';
-    html += '<button class="qty-btn" onclick="changeQty(' + i + ', -1)"' + (qty === 0 ? ' disabled' : '') + '>-</button>';
+    html += '<button class="qty-btn" onclick="changeQty('' + item.name + '', -1)"' + (qty === 0 ? ' disabled' : '') + '>-</button>';
     html += '<span class="qty-val" id="qty-' + id + '">' + qty + '</span>';
-    html += '<button class="qty-btn" onclick="changeQty(' + i + ', 1)"' + ((fullyDone || qty >= remaining) ? ' disabled' : '') + '>+</button>';
+    html += '<button class="qty-btn" onclick="changeQty('' + item.name + '', 1)"' + ((fullyDone || qty >= remaining) ? ' disabled' : '') + '>+</button>';
     html += '</div></div>';
-  }
+  });
   grid.innerHTML = html;
 }
 
-function changeQty(idx, delta) {
-  var item = ITEMS[idx];
-  var c = claimed[item.name] || 0;
+function changeQty(name, delta) {
+  var item = null;
+  for (var i = 0; i < ITEMS.length; i++) { if (ITEMS[i].name === name) { item = ITEMS[i]; break; } }
+  var c = claimed[name] || 0;
   var remaining = Math.max(0, item.needed - c);
-  var current = quantities[item.name] || 0;
-  quantities[item.name] = Math.max(0, Math.min(remaining, current + delta));
+  var current = quantities[name] || 0;
+  quantities[name] = Math.max(0, Math.min(remaining, current + delta));
   renderPickers();
 }
 
@@ -267,12 +275,19 @@ function submitForm() {
     items: itemsList.join(', ')
   };
 
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(entry)
-  }).catch(function(err) { console.warn('Sheets sync failed:', err); });
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = SCRIPT_URL;
+  form.target = 'hidden-iframe';
+  form.style.display = 'none';
+  var input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = 'data';
+  input.value = JSON.stringify(entry);
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
 
   document.getElementById('form-section').style.display = 'none';
   var card = document.getElementById('success-card');
@@ -290,3 +305,4 @@ function submitForm() {
 
 loadStatus();
 </script>
+<iframe name="hidden-iframe" style="display:none;"></iframe>
